@@ -25,9 +25,7 @@ function fmtAge(sec) {
   const hours = Math.floor(min / 60);
   const restMin = min % 60;
   if (hours < 48) return restMin ? `${hours} ч ${restMin} мин` : `${hours} ч`;
-  const days = Math.floor(hours / 24);
-  const restHours = hours % 24;
-  return restHours ? `${days} дн ${restHours} ч` : `${days} дн`;
+  return null;
 }
 
 async function tg(text) {
@@ -85,7 +83,11 @@ console.log(`heartbeat age: ${Math.round(age)}s, alerted=${state.alerted}, chats
 
 if (age > STALE_SECONDS) {
   if (!state.alerted) {
-    await tg(`🔴 discord-bot DOWN: нет heartbeat ${fmtAge(age)}`);
+    const ageStr = fmtAge(age) ?? `с ${new Date(state.ts).toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow',
+    })}`;
+    await tg(`🔴 discord-bot DOWN: нет heartbeat ${ageStr}`);
     await writeGist(true);
     console.log('down alert sent');
   } else {
