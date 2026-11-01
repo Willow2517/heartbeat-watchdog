@@ -29,3 +29,4 @@ jobs:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT_ID }}
+          TG_CHAT2: ${{ secrets.TG_CHAT_ID2 }}
