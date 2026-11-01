@@ -31,15 +31,23 @@ function fmtAge(sec) {
 }
 
 async function tg(text) {
-  for (const chat of CHATS) {
+  const results = await Promise.all(CHATS.map(async (chat) => {
     const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chat, text }),
     });
-    if (!res.ok) {
-      throw new Error(`telegram ${res.status} (chat ${chat}): ${await res.text()}`);
+    return { chat, ok: res.ok, detail: res.ok ? '' : `${res.status}: ${await res.text()}` };
+  }));
+  for (const r of results) {
+    if (r.ok) {
+      console.log(`sent to chat ${r.chat}`);
+    } else {
+      console.error(`failed for chat ${r.chat}: ${r.detail}`);
     }
+  }
+  if (!results.some((r) => r.ok)) {
+    throw new Error('telegram: all sends failed');
   }
 }
 
