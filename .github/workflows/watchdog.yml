@@ -12,6 +12,7 @@ concurrency:
 env:
   GIST_ID: a9e0f48ddb0b673ddf233cb725b79490
   STALE_SECONDS: "600"
+  REPEAT_SECONDS: "1800"
 
 jobs:
   check:
@@ -26,6 +27,7 @@ jobs:
           GIST_ID: ${{ env.GIST_ID }}
           GIST_OWNER: ${{ github.repository_owner }}
           STALE_SECONDS: ${{ env.STALE_SECONDS }}
+          REPEAT_SECONDS: ${{ env.REPEAT_SECONDS }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT_ID }}

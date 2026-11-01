@@ -8,6 +8,7 @@ if (CHATS.length === 0) {
   process.exit(1);
 }
 const STALE_SECONDS = Number(process.env.STALE_SECONDS || 600);
+const REPEAT_SECONDS = Number(process.env.REPEAT_SECONDS || 1800);
 
 function must(name) {
   if (!process.env[name]) {
@@ -49,8 +50,7 @@ async function tg(text) {
   }
 }
 
-async function writeGist(alerted) {
-  const content = JSON.stringify({ ts: new Date().toISOString(), alerted });
+async function writeState(state) {
   const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
     method: 'PATCH',
     headers: {
@@ -58,7 +58,7 @@ async function writeGist(alerted) {
       Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ files: { 'heartbeat.txt': { content } } }),
+    body: JSON.stringify({ files: { 'heartbeat.txt': { content: JSON.stringify(state) } } }),
   });
   if (!res.ok) {
     throw new Error(`gist ${res.status}: ${await res.text()}`);
@@ -79,22 +79,27 @@ try {
 }
 
 const age = (Date.now() - new Date(state.ts).getTime()) / 1000;
-console.log(`heartbeat age: ${Math.round(age)}s, alerted=${state.alerted}, chats=${CHATS.length}`);
-
-if (age > STALE_SECONDS) {
-  if (!state.alerted) {
-    const ageStr = fmtAge(age) ?? `с ${new Date(state.ts).toLocaleString('ru-RU', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow',
-    })}`;
-    await tg(`🔴 discord-bot DOWN: нет heartbeat ${ageStr}`);
-    await writeGist(true);
-    console.log('down alert sent');
-  } else {
-    console.log('already alerted, skipping');
-  }
-} else if (state.alerted) {
-  await tg('🟢 discord-bot UP: снова в сети');
-  await writeGist(false);
-  console.log('recovery sent');
+if (!state.ts || Number.isNaN(age)) {
+  throw new Error(`bad heartbeat ts: ${state.ts}`);
 }
+console.log(`heartbeat age: ${Math.round(age)}s, alerted=${state.alerted}, repeat=${REPEAT_SECONDS}s, chats=${CHATS.length}`);
+
+if (age <= STALE_SECONDS) {
+  console.log('heartbeat is fresh — silence means OK, no message');
+  process.exit(0);
+}
+
+const now = Date.now();
+const alertedAt = state.alerted_at ? new Date(state.alerted_at).getTime() : 0;
+if (state.alerted && now - alertedAt < REPEAT_SECONDS * 1000) {
+  console.log('already alerted, repeat not due yet');
+  process.exit(0);
+}
+
+const ageStr = fmtAge(age) ?? `с ${new Date(state.ts).toLocaleString('ru-RU', {
+  day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow',
+})}`;
+await tg(`🔴 discord-bot DOWN: нет heartbeat ${ageStr}`);
+await writeState({ ...state, alerted: true, alerted_at: new Date(now).toISOString() });
+console.log('down alert sent');
