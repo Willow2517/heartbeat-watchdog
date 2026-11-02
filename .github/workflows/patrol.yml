@@ -1,9 +1,12 @@
 name: heartbeat-watchdog
 
 on:
+  repository_dispatch:
+    types: [watchdog-tick]
+  workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch:
+    - cron: "3-58/5 * * * *"
 
 concurrency:
   group: heartbeat-watchdog
