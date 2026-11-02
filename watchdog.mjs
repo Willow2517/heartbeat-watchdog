@@ -50,7 +50,14 @@ async function tg(text) {
   }
 }
 
-async function writeState(state) {
+async function readFile(file) {
+  const res = await fetch(`https://gist.githubusercontent.com/${GIST_OWNER}/${GIST_ID}/raw/${file}?cb=${Date.now()}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`gist raw ${file} ${res.status}`);
+  return res.text();
+}
+
+async function writeAlert(alerted, alerted_at) {
   const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
     method: 'PATCH',
     headers: {
@@ -58,48 +65,47 @@ async function writeState(state) {
       Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ files: { 'heartbeat.txt': { content: JSON.stringify(state) } } }),
+    body: JSON.stringify({ files: { 'alert.txt': { content: JSON.stringify({ alerted, alerted_at }) } } }),
   });
   if (!res.ok) {
     throw new Error(`gist ${res.status}: ${await res.text()}`);
   }
 }
 
-const rawUrl = `https://gist.githubusercontent.com/${GIST_OWNER}/${GIST_ID}/raw/heartbeat.txt?cb=${Date.now()}`;
-const raw = await fetch(rawUrl).then((r) => {
-  if (!r.ok) throw new Error(`gist raw ${r.status}`);
-  return r.text();
-});
+const hbRaw = await readFile('heartbeat.txt');
+if (!hbRaw) throw new Error('heartbeat.txt is missing');
+const hb = JSON.parse(hbRaw);
+const alRaw = await readFile('alert.txt');
+const al = alRaw ? JSON.parse(alRaw) : { alerted: false, alerted_at: null };
 
-let state;
-try {
-  state = JSON.parse(raw);
-} catch {
-  throw new Error(`bad gist content: ${raw}`);
+const age = (Date.now() - new Date(hb.ts).getTime()) / 1000;
+if (!hb.ts || Number.isNaN(age)) {
+  throw new Error(`bad heartbeat ts: ${hb.ts}`);
 }
-
-const age = (Date.now() - new Date(state.ts).getTime()) / 1000;
-if (!state.ts || Number.isNaN(age)) {
-  throw new Error(`bad heartbeat ts: ${state.ts}`);
-}
-console.log(`heartbeat age: ${Math.round(age)}s, alerted=${state.alerted}, repeat=${REPEAT_SECONDS}s, chats=${CHATS.length}`);
+console.log(`heartbeat age: ${Math.round(age)}s, alerted=${al.alerted}, repeat=${REPEAT_SECONDS}s, chats=${CHATS.length}`);
 
 if (age <= STALE_SECONDS) {
-  console.log('heartbeat is fresh — silence means OK, no message');
+  if (al.alerted) {
+    await tg('🟢 discord-bot UP: снова в сети');
+    await writeAlert(false, null);
+    console.log('recovery sent');
+  } else {
+    console.log('heartbeat is fresh — silence means OK');
+  }
   process.exit(0);
 }
 
 const now = Date.now();
-const alertedAt = state.alerted_at ? new Date(state.alerted_at).getTime() : 0;
-if (state.alerted && now - alertedAt < REPEAT_SECONDS * 1000) {
+const alertedAt = al.alerted_at ? new Date(al.alerted_at).getTime() : 0;
+if (al.alerted && now - alertedAt < REPEAT_SECONDS * 1000) {
   console.log('already alerted, repeat not due yet');
   process.exit(0);
 }
 
-const ageStr = fmtAge(age) ?? `с ${new Date(state.ts).toLocaleString('ru-RU', {
+const ageStr = fmtAge(age) ?? `с ${new Date(hb.ts).toLocaleString('ru-RU', {
   day: '2-digit', month: '2-digit', year: 'numeric',
   hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Moscow',
 })}`;
 await tg(`🔴 discord-bot DOWN: нет heartbeat ${ageStr}`);
-await writeState({ ...state, alerted: true, alerted_at: new Date(now).toISOString() });
+await writeAlert(true, new Date(now).toISOString());
 console.log('down alert sent');
